@@ -1,0 +1,91 @@
+#!/bin/bash
+#
+# Author: David Peterson
+# Description: This script takes two arguments, clientID and backup type (web or db) and will backup it up and upload it to their S3 folder.
+#
+
+if [ $# -ne 2 ]
+then
+    echo "Error in $0 - Invalid Argument Count"
+    echo "Syntax: $0 <<clientid>> <<backup_type>>"
+    echo "Where <<backup_type>> is either 'web', 'db', or 'configs'"
+    exit
+fi
+
+
+# Specify the backup dirs
+BACKUP_DIR="/rootpath/clients/$1/root/www/production/"
+CONFIG_DIR="/rootpath/clients/$1/configs/"
+
+# Specify date format. This gets attached to log file 
+DATE=`date +%F_%H-%M`
+
+# Specify the location of log file
+LOGFILE=""
+
+# Backup file name and S3 location
+if [ $2 == "web" ]; then BACKUP_FILE=$1-web_$DATE.tar.gz; S3_BUCKET=s3://companyxyz/$1/www/; fi
+if [ $2 == "db" ]; then BACKUP_FILE=$1-db_$DATE.tar.gz; S3_BUCKET=s3://companyxyz/$1/database/; fi
+if [ $2 == "configs" ]; then BACKUP_FILE=$1-configs_$DATE.tar.gz; S3_BUCKET=s3://companyxyz/$1/configs/; fi
+
+## END OF SETTINGS ##
+
+## START OF SCRIPT ##
+
+echo Backup File: $BACKUP_FILE
+echo S3 Location: $S3_BUCKET
+
+#### Config Backups ######
+if [ $2 == "configs" ]
+   then
+        # Tar/Gzip their config dirctory and store the file in tmp
+        echo "Backing up directory $CONFIG_DIR and putting the backup here /tmp/$BACKUP_FILE"
+	cd $CONFIG_DIR
+        tar -zcf /tmp/$BACKUP_FILE *
+
+        # Put the backup file in S3
+        s3cmd put /tmp/$BACKUP_FILE $S3_BUCKET
+
+        # Cleanup file
+        rm -f /tmp/$BACKUP_FILE
+
+fi
+
+
+#### Web Backups ######
+if [ $2 == "web" ]
+   then
+	# Tar/Gzip their web dirctory and store the file in tmp
+	echo "Backing up directory $BACKUP_DIR and putting the backup here /tmp/$BACKUP_FILE"
+	cd $BACKUP_DIR
+	tar -zcf /tmp/$BACKUP_FILE *
+
+	# Put the backup file in S3
+	s3cmd put /tmp/$BACKUP_FILE $S3_BUCKET
+
+	# Cleanup file
+	rm -f /tmp/$BACKUP_FILE
+
+fi
+
+
+
+#### Database Backups #####
+if [ $2 == "db" ]
+   then
+	cd /data/
+	## Backup production database and blog database
+	/usr/bin/mysqldump --single-transaction $1 > $1-db_$DATE.sql
+	/usr/bin/mysqldump --single-transaction $1_blog > $1_blog-db_$DATE.sql
+
+	## Tar/Gzip the files
+	tar -zcf $BACKUP_FILE $1-db_$DATE.sql $1_blog-db_$DATE.sql
+
+	## Uplodate backup to S3
+	s3cmd put /data/$BACKUP_FILE $S3_BUCKET
+
+	# Cleanup files
+	rm -f $BACKUP_FILE $1-db_$DATE.sql $1_blog-db_$DATE.sql
+fi
+
+

@@ -1,0 +1,65 @@
+#!/bin/bash
+#
+# Author: David Peterson
+# Description: Run a shell command on all, subset, or one server listed in a file. Server requires SSH public key authentication for password-less login.
+#
+
+## Settings ##
+
+# Specify server file
+SERVER_FILE="/scripts/sshcluster-servers"
+
+# Specify date format. This gets attached to log file 
+RUNDATE=`date +%F_%H-%M`
+
+# Specify the location of log file
+LOGFILE="/scripts/logs/sshcluster_log"
+
+
+## END OF SETTINGS ##
+
+
+## START OF SCRIPT ##
+
+if [ $# -ne 2 ]
+then
+    echo "Error in $0 - Invalid Argument Count"
+    echo "Syntax: $0 <<servers>> <<command>>"
+    echo "Where <<servers>> is either 'all' or part of the name of the servers"
+    exit
+fi
+
+
+if [ $1 == "all" ]
+   then
+	for h in `cat $SERVER_FILE`; do
+   		echo "Running command: $2"
+		echo "On: $h"
+		# Add to log file
+		echo "" >> $LOGFILE
+		echo "DATE: $RUNDATE" >> $LOGFILE
+		echo "Running command: $2" >> $LOGFILE
+		echo "On: $h" >> $LOGFILE
+
+		# Run the command
+		ssh $h $2 2>&1 | tee -a $LOGFILE
+		echo ""
+	done
+   else
+	for h in `grep $1 $SERVER_FILE`; do
+                echo "Running command: $2"
+                echo "On: $h"
+                # Add to log file
+                echo "" >> $LOGFILE
+                echo "DATE: $RUNDATE" >> $LOGFILE
+                echo "Running command: $2" >> $LOGFILE
+                echo "On: $h" >> $LOGFILE
+
+                # Run the command
+                ssh $h $2 2>&1 | tee -a $LOGFILE
+                echo ""
+	done
+fi
+
+
+

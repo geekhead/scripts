@@ -1,0 +1,162 @@
+#!/bin/bash
+#
+# Author: David Peterson
+# Description: This script will find all redis instances configured on the server and perform a cetain function
+#
+
+REDIS_CONFIG_DIR=/etc/redis
+
+HOST=`hostname`
+if [ $HOST == "redis-master" ]; then
+        OTHER_HOST="redis-slave"
+else
+        OTHER_HOST="redis-master"
+fi
+
+
+## START OF SCRIPT ##
+
+if [ $# -lt 1 ]
+then
+    echo "Error in $0 - Invalid Argument Count"
+    echo "Syntax: $0 <<command>> <<redis_port>> "
+    echo "Where <<command>> is: status, slave, master, purge, shutdown, start, info"
+    echo "Optional <<redis_port>>"
+    exit
+fi
+
+
+
+for i in `ls $REDIS_CONFIG_DIR |awk -F. '{print $1}'` 
+    do 
+	PASS=`cat $REDIS_CONFIG_DIR/$i.conf | grep requirepass |awk '{print $2}'`
+
+	case "$1" in
+"status")
+	if [ -n "$2" ]
+	then
+		if [ $i == $2 ]
+		then
+        	echo Redis $i
+        	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
+        	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_host
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_port
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_link_status
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep used_memory_human
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep connected_clients
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_connections_received
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_commands_processed
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep evicted_keys
+			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep db
+			exit
+		fi
+	else
+		echo Redis $i
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_host
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_port
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_link_status
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep used_memory_human
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep connected_clients
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_connections_received
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_commands_processed
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep evicted_keys
+            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep db
+            echo " "	
+	fi
+        ;;
+"info")
+	if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+        		echo Redis $i
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS info
+			exit
+		fi
+	else
+		echo Redis $i
+                redis-cli -h 127.0.0.1 -p $i -a $PASS info
+                echo " "
+	fi
+        ;;
+"slave")
+	if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+        		echo "Setting Redis $i to be a slave to $OTHER_HOST..."
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS slaveof $OTHER_HOST $i
+			exit
+		fi
+	else
+		echo "Setting Redis $i to be a slave to $OTHER_HOST..."
+                redis-cli -h 127.0.0.1 -p $i -a $PASS slaveof $OTHER_HOST $i
+	fi
+        ;;
+"master")
+	if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+        		echo "Setting Redis $i to be the master server..."
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS slaveof no one
+			exit
+		fi
+	else
+		echo "Setting Redis $i to be the master server..."
+                redis-cli -h 127.0.0.1 -p $i -a $PASS slaveof no one
+	fi
+        ;;
+"purge")
+        if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+                        echo "Purging Redis data on $i..."
+                        redis-cli -h 127.0.0.1 -p $i -a $PASS flushall
+                        exit
+                fi
+        else
+                echo "Purging Redis data on $i..."
+                redis-cli -h 127.0.0.1 -p $i -a $PASS flushall
+        fi
+        ;;
+"shutdown")
+	if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+        		echo "Shutting down Redis $i..."
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS shutdown
+			exit
+		fi
+	else
+		echo "Shutting down Redis $i..."
+                redis-cli -h 127.0.0.1 -p $i -a $PASS shutdown
+	fi
+        ;;
+"start")
+	if [ -n "$2" ]
+        then
+                if [ $i == $2 ]
+                then
+        		echo "Starting up Redis $i..."
+        		service redis_$i start
+			exit
+		fi
+	else
+		echo "Starting up Redis $i..."
+                service redis_$i start
+	fi
+        ;;
+
+*)
+        echo "Invalid selection. Please choise between 'status', 'info', 'slave', 'master', 'purge', 'shutdown', 'start'."
+        exit
+        ;;
+esac
+	
+done

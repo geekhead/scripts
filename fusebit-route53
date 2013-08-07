@@ -1,0 +1,171 @@
+#!/bin/bash
+#
+# Author: David Peterson
+# Description: Route53 DNS update script. Creates/Updates private/public IP address, local hosts file, and APF firewall.
+#
+
+# To turn script tracing on un-comment out this line
+#set -x
+
+# your internal DNS zone
+PRIVATE_DNSZONE="test.companyxyz.com"
+PUBLIC_DNSZONE="test.com"
+CLUSTER=`hostname|cut -d- -f1`
+# Our global hosts file
+R53_HOST_PATH="/mnt/$CLUSTER-fsmaster-00/global"
+R53_HOST_FILE="$R53_HOST_PATH/route53_hosts_file.tmp"
+
+#################### Script Functions ###########################
+
+function system_public_ip {
+	# returns the public IP assigned to eth0
+	echo $(ifconfig eth0 | awk -F: '/inet addr:/ {print $2}' | awk '{ print $1 }')
+}
+
+function system_private_ip {
+	# returns the private IP assigned to eth0:0
+	echo $(ifconfig eth0:0 | awk -F: '/inet addr:/ {print $2}' | awk '{ print $1 }')
+}
+
+# $1 - Private DNZ Zone
+function create_route53_private {
+	PRIVATEIP=`system_private_ip`
+	/usr/local/bin/cli53 rrcreate $1 `hostname` A $PRIVATEIP --replace
+}
+
+# $1 - Public DNZ Zone
+function create_route53_public {
+        PUBLICIP=`system_public_ip`
+        /usr/local/bin/cli53 rrcreate $1 `hostname` A $PUBLICIP --replace
+}
+
+# $1 - Global hosts file
+function create_hosts_file {
+	# Obtain cluster number from hostname
+	CLUSTER=`hostname|cut -d- -f1`
+
+	# Make sure we can connect to the storage server before continuing
+	if [ -r $1 ]; then
+		# Make a backup first of the hosts file
+		cp /etc/hosts /etc/hosts.bak
+		cp /etc/hosts /etc/hosts.bak2
+        	# Removing existing entries to prevent duplicates
+		#sed -i '/192/d' /etc/hosts
+		# Get list of servers from our global host file and add them to our temp local hosts file
+		sed -i '/$/d' /tmp/hosts.tmp
+		echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >> /tmp/hosts.tmp
+		echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> /tmp/hosts.tmp
+		cat /mnt/cs1-fsmaster-00/global/route53_hosts_file.tmp >> /tmp/hosts.tmp
+		cp /tmp/hosts.tmp /etc/hosts
+	else
+        	echo "Failed to read the file $1"
+		exit 
+	fi
+}
+
+# $1 - Global hosts file
+function update_firewall {
+	# Obtain cluster number from hostname
+	CLUSTER=`hostname|cut -d- -f1`
+	# APF Allow file
+	APF_ALLOW_FILE="/etc/apf/allow_hosts.rules"
+	# APF curent hosts temp file
+	APF_CURRENT_HOSTS="/tmp/apf-current-hosts.tmp"
+	# Route53 hosts temp file
+	R53_LOCALHOSTS_FILE="/tmp/apf-route53-hosts.tmp"
+
+	# Make sure we can connect to the storage server before continuing
+        if [ -r $1 ]; then
+		# Because APF depends on the /etc/hosts file to add/remove entries we need to merge the backup hosts file to remove entries. Yes it's a hack
+        	cat /etc/hosts.bak |grep -i $CLUSTER >> /etc/hosts
+		# Generate file of current hosts in the firewall
+		cat $APF_ALLOW_FILE |grep -i $CLUSTER |grep -v \# > $APF_CURRENT_HOSTS
+
+		# Get list of servers from our global file
+		cat /mnt/cs1-fsmaster-00/global/route53_hosts_file.tmp |awk '{print $2}' > $R53_LOCALHOSTS_FILE
+		# We now need to remove the current host and any local cluster host names from the local Route53 host file
+		sed -i "/`hostname`/d" $R53_LOCALHOSTS_FILE
+		sed -i "/$CLUSTER-`hostname|awk -F- '{print $2}'`-00/d" $R53_LOCALHOSTS_FILE
+		x=0		
+
+		# APF Add Function
+		for h in `cat $R53_LOCALHOSTS_FILE`; do
+        		for h2 in `cat $APF_CURRENT_HOSTS`; do
+                		if [ $h == $h2 ]; then
+                        		x=1
+                        		break
+                		else
+                        		x=0
+                		fi
+        		done
+        		if [ $x = "0" ]; then
+                		/usr/local/sbin/apf -a $h
+        		fi
+        		x=0
+		done
+
+		# APF Remove Function
+		for h in `cat $APF_CURRENT_HOSTS`; do
+        		for h2 in `cat $R53_LOCALHOSTS_FILE`; do
+                		if [ $h == $h2 ]; then
+                        		x=1
+                        		break
+                		else
+                        		x=0
+                		fi
+        		done
+        		if [ $x = "0" ]; then
+                		/usr/local/sbin/apf -u $h
+        		fi
+        		x=0
+		done
+		# Once hosts have been added/removed from APF we need to re-create our hosts file
+		cp /etc/hosts.bak2 /etc/hosts
+		create_hosts_file $1
+		# Remove blank lines from /etc/apf/allow_hosts.rules. Some process keeps adding them so this is just a cleanup
+		sed -i '/^$/d' /etc/apf/allow_hosts.rules
+        else
+                echo "Failed to connect to Route53!"
+		exit
+        fi
+}
+
+################## End of Script Functions #####################
+
+
+## START OF SCRIPT ##
+
+if [ $# -ne 1 ]
+then
+    echo "Error in $0 - Invalid Argument Count"
+    echo "Syntax: $0 <<command>>"
+    echo "Where <<command>> is: private, public, hosts-file, hosts-apf"
+    exit
+fi
+
+
+case "$1" in
+"private")
+	echo "Creating Route53 DNS entry for private IP address..."
+	create_route53_private $PRIVATE_DNSZONE
+	;;
+"public")
+	echo "Creating Route53 DNS entry for public IP address..."
+	create_route53_public $PUBLIC_DNSZONE
+	;;
+"hosts-file")
+	echo "Updating /etc/hosts file with all cluster hosts..."
+	create_hosts_file $R53_HOST_FILE
+	;;
+"hosts-apf")
+	echo "Updating /etc/hosts file with all cluster hosts..."	
+	create_hosts_file $R53_HOST_FILE
+	echo "Adding/Removing hosts to APF firewall allowed file..."
+	update_firewall $R53_HOST_FILE
+	;;
+*)
+	echo "Invalid selection. Please choise between 'private', 'public', 'hosts-file', 'hosts-apf'."
+	exit
+	;;
+esac
+
