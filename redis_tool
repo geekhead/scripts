@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Author: David Peterson
-# Description: This script will find all redis instances configured on the server and perform a cetain function
+# Description: This script will find all redis instances configured on the server and perform a cetain function. This script supports redis instances configured with a password.
 #
 
 REDIS_CONFIG_DIR=/etc/redis
@@ -37,9 +37,9 @@ for i in `ls $REDIS_CONFIG_DIR |awk -F. '{print $1}'`
 	then
 		if [ $i == $2 ]
 		then
-        	echo Redis $i
-        	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
-        	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
+        		echo Redis $i
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
+        		redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
 			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_host
 			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_port
 			redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_link_status
@@ -53,18 +53,18 @@ for i in `ls $REDIS_CONFIG_DIR |awk -F. '{print $1}'`
 		fi
 	else
 		echo Redis $i
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_host
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_port
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_link_status
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep used_memory_human
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep connected_clients
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_connections_received
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_commands_processed
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep evicted_keys
-            redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep db
-            echo " "	
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep role
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep slave0
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_host
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_port
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep master_link_status
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep used_memory_human
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep connected_clients
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_connections_received
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep total_commands_processed
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep evicted_keys
+            	redis-cli -h 127.0.0.1 -p $i -a $PASS info|grep db
+            	echo " "	
 	fi
         ;;
 "info")
